@@ -6,7 +6,7 @@ import com.finops.mcp.model.McpResponse;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/mcp")
+@RequestMapping("/mcp/tools")
 public class McpController {
 
     private final ToolDispatcher dispatcher;
@@ -15,7 +15,7 @@ public class McpController {
         this.dispatcher = dispatcher;
     }
 
-    @PostMapping("/tools/call")
+    @PostMapping("/cost/report")
     public McpResponse call(@RequestBody McpRequest request) {
         return dispatcher.dispatch(request);
     }
