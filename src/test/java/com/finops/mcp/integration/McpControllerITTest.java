@@ -1,11 +1,12 @@
-package java.com.finops.mcp.integration;
+package com.finops.mcp.integration;
 
 import com.finops.mcp.model.McpRequest;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
 import java.util.Map;
 
@@ -15,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * INTEGRATION TEST
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class McpControllerIT {
+class McpControllerITTest {
 
     @Autowired
     private TestRestTemplate restTemplate;
@@ -29,7 +30,7 @@ class McpControllerIT {
         );
 
         ResponseEntity<String> response = restTemplate.postForEntity(
-                "/mcp/tools/call",
+                "/mcp/tools/cost/report",
                 request,
                 String.class
         );
@@ -47,7 +48,7 @@ class McpControllerIT {
         );
 
         ResponseEntity<String> response = restTemplate.postForEntity(
-                "/mcp/tools/call",
+                "/mcp/tools/cost/report",
                 request,
                 String.class
         );
