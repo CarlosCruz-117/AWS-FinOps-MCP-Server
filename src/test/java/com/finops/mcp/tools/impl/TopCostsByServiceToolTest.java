@@ -1,7 +1,7 @@
 package com.finops.mcp.tools.impl;
 
 import com.finops.mcp.csv.CsvExporter;
-import com.finops.mcp.impl.TopEc2CostTool;
+import com.finops.mcp.impl.TopCostsByServiceTool;
 import com.finops.mcp.model.CostRecord;
 import com.finops.mcp.service.CostAggregationService;
 
@@ -13,7 +13,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-class TopEc2CostToolTest {
+class TopCostsByServiceToolTest {
 
     @Test
     void shouldReturnAggregatedCostsAndCsvPath() {
@@ -40,8 +40,8 @@ class TopEc2CostToolTest {
         when(csvExporter.export(mockRecords))
                 .thenReturn("output/cost-report.csv");
 
-        TopEc2CostTool tool =
-                new TopEc2CostTool(service, csvExporter);
+        TopCostsByServiceTool tool =
+                new TopCostsByServiceTool(service, csvExporter);
 
         // ACT
         Object result =
@@ -83,8 +83,8 @@ class TopEc2CostToolTest {
         when(csvExporter.export(anyList()))
                 .thenReturn("output/cost-report.csv");
 
-        TopEc2CostTool tool =
-                new TopEc2CostTool(service, csvExporter);
+        TopCostsByServiceTool tool =
+                new TopCostsByServiceTool(service, csvExporter);
 
         // ACT
         tool.execute(Map.of());

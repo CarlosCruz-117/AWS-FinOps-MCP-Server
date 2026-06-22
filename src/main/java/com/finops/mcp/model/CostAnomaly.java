@@ -2,11 +2,12 @@ package com.finops.mcp.model;
 
 import java.time.LocalDate;
 
-public record CostRecord(
+public record CostAnomaly(
         String service,
-        String usageType,
-        String region,
-        double cost,
         LocalDate date,
+        double actualCost,
+        double expectedCost,
+        double deviationPercent,
         String accountAlias
-) {}
+) {
+}

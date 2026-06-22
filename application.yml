@@ -1,0 +1,20 @@
+finops:
+  accounts:
+    - account-id: "111111111111"
+      alias: "prod"
+      role-arn: "arn:aws:iam::111111111111:role/FinOpsReadOnlyRole"
+      region: "eu-west-1"
+    - account-id: "222222222222"
+      alias: "staging"
+      role-arn: "arn:aws:iam::222222222222:role/FinOpsReadOnlyRole"
+      region: "eu-west-1"
+
+
+
+
+
+
+
+      # Para desarrollo local con una sola cuenta (poner la propia, sin assume-role),
+      # role-arn puede dejarse vacío/null y la factory usará el DefaultCredentialsProvider directamente
+      # así no rompemos el flujo actual de "una cuenta, mis credenciales locales".

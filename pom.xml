@@ -28,7 +28,6 @@
     <!-- AWS SDK BOM -->
     <dependencyManagement>
         <dependencies>
-
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
                 <artifactId>bom</artifactId>
@@ -36,7 +35,6 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-
         </dependencies>
     </dependencyManagement>
 
@@ -60,6 +58,10 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- ******************* -->
+        <!--         AWS         -->
+        <!-- ******************* -->
+
         <!-- AWS Cost Explorer -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
@@ -72,17 +74,27 @@
             <artifactId>sts</artifactId>
         </dependency>
 
+        <!-- AWS EC2 -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ec2</artifactId>
+        </dependency>
+
+        <!-- AWS CloudWatch -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cloudwatch</artifactId>
+        </dependency>
+
+        <!-- ******************* -->
+        <!--      UTILIDADES     -->
+        <!-- ******************* -->
+
         <!-- CSV -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-csv</artifactId>
             <version>${commons.csv.version}</version>
-        </dependency>
-
-        <!-- Jackson -->
-        <dependency>
-            <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
         </dependency>
 
         <!-- Lombok -->
@@ -92,39 +104,21 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- TESTS -->
+        <!-- ******************* -->
+        <!--        TESTS        -->
+        <!-- ******************* -->
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>5.10.2</version>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.mockito</groupId>
-            <artifactId>mockito-junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-
-        <dependency>
-            <groupId>org.assertj</groupId>
-            <artifactId>assertj-core</artifactId>
-            <scope>test</scope>
-        </dependency>
-
     </dependencies>
+
+    <!-- ******************* -->
+    <!--       PLUGINS       -->
+    <!-- ******************* -->
 
     <build>
         <plugins>
