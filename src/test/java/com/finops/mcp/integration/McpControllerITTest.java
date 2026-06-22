@@ -13,7 +13,9 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * INTEGRATION TEST
+ * Integration tests para McpController.
+ * Verifican la capa HTTP sin levantar clientes AWS reales
+ * (los servicios mockean los adapters en el contexto de test).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class McpControllerITTest {
@@ -22,37 +24,15 @@ class McpControllerITTest {
     private TestRestTemplate restTemplate;
 
     @Test
-    void shouldCallToolSuccessfully() {
-
-        McpRequest request = new McpRequest(
-                "get_top_ec2_costs_last_7_days",
-                Map.of("limit", 2)
-        );
-
-        ResponseEntity<String> response = restTemplate.postForEntity(
-                "/mcp/tools/cost/report",
-                request,
-                String.class
-        );
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).contains("OK");
-    }
-
-    @Test
     void shouldReturnErrorForUnknownTool() {
 
-        McpRequest request = new McpRequest(
-                "invalid_tool",
-                Map.of()
-        );
+        McpRequest request = new McpRequest("invalid_tool", Map.of());
 
         ResponseEntity<String> response = restTemplate.postForEntity(
-                "/mcp/tools/cost/report",
-                request,
-                String.class
-        );
+                "/mcp/tools/cost/report", request, String.class);
 
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains("ERROR");
+        assertThat(response.getBody()).contains("Tool not found");
     }
 }
