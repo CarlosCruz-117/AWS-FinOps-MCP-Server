@@ -1,48 +1,81 @@
 package com.finops.mcp.service;
 
+import com.finops.mcp.account.AwsAccountProperties;
+import com.finops.mcp.account.AwsAccountProperties.AwsAccountConfig;
 import com.finops.mcp.aws.AwsCostExplorerAdapter;
 import com.finops.mcp.model.CostRecord;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class CostAggregationServiceTest {
 
+    private final AwsAccountConfig account =
+            new AwsAccountConfig("111111111111", "test-account", "", "eu-west-1");
+
+    private final AwsAccountProperties props =
+            new AwsAccountProperties(List.of(account));
+
     @Test
-    void shouldReturnTopNCostsSorted() {
+    void shouldReturnTopNCostsSortedDescending() {
 
         AwsCostExplorerAdapter aws = mock(AwsCostExplorerAdapter.class);
-
-        when(aws.fetchLast7DaysEc2Costs()).thenReturn(List.of(
-                new CostRecord("ec2", "t3", "eu-west-1", 10),
-                new CostRecord("ec2", "m5", "eu-west-1", 50),
-                new CostRecord("ec2", "t2", "eu-west-1", 20)
+        when(aws.fetchDailyCosts(eq(account), anyInt())).thenReturn(List.of(
+                record("EC2", 10.0),
+                record("S3", 50.0),
+                record("RDS", 20.0)
         ));
 
-        CostAggregationService service = new CostAggregationService(aws);
+        CostAggregationService service = new CostAggregationService(aws, props);
 
-        var result = service.getTopCosts(2);
+        List<CostRecord> result = service.getTopCosts(7, 2);
 
         assertThat(result).hasSize(2);
-        assertThat(result.get(0).cost()).isEqualTo(50);
-        assertThat(result.get(1).cost()).isEqualTo(20);
+        assertThat(result.get(0).cost()).isEqualTo(50.0);
+        assertThat(result.get(1).cost()).isEqualTo(20.0);
     }
 
     @Test
-    void shouldHandleEmptyData() {
+    void shouldReturnEmpty_whenNoData() {
 
         AwsCostExplorerAdapter aws = mock(AwsCostExplorerAdapter.class);
+        when(aws.fetchDailyCosts(any(), anyInt())).thenReturn(List.of());
 
-        when(aws.fetchLast7DaysEc2Costs()).thenReturn(List.of());
+        CostAggregationService service = new CostAggregationService(aws, props);
 
-        CostAggregationService service = new CostAggregationService(aws);
+        assertThat(service.getTopCosts(7, 5)).isEmpty();
+    }
 
-        var result = service.getTopCosts(5);
+    @Test
+    void shouldAggregateAcrossMultipleAccounts() {
 
-        assertThat(result).isEmpty();
+        AwsAccountConfig account2 =
+                new AwsAccountConfig("222222222222", "prod", "", "eu-west-1");
+        AwsAccountProperties multiProps =
+                new AwsAccountProperties(List.of(account, account2));
+
+        AwsCostExplorerAdapter aws = mock(AwsCostExplorerAdapter.class);
+        when(aws.fetchDailyCosts(eq(account), anyInt()))
+                .thenReturn(List.of(record("EC2", 30.0)));
+        when(aws.fetchDailyCosts(eq(account2), anyInt()))
+                .thenReturn(List.of(record("EC2", 80.0)));
+
+        CostAggregationService service = new CostAggregationService(aws, multiProps);
+
+        List<CostRecord> result = service.getTopCosts(7, 10);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).cost()).isEqualTo(80.0);
+    }
+
+    private CostRecord record(String service, double cost) {
+        return new CostRecord(service, "SERVICE_GROUP", "GLOBAL",
+                cost, LocalDate.now(), "test-account");
     }
 }

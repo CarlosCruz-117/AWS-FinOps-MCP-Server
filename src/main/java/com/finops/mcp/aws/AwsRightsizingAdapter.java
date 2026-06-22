@@ -1,13 +1,22 @@
 package com.finops.mcp.aws;
 
+import com.finops.mcp.account.AwsAccountProperties.AwsAccountConfig;
+import com.finops.mcp.account.AwsClientFactory;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.*;
+import software.amazon.awssdk.services.cloudwatch.model.Datapoint;
 import software.amazon.awssdk.services.cloudwatch.model.Dimension;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricStatisticsRequest;
+import software.amazon.awssdk.services.cloudwatch.model.Statistic;
 import software.amazon.awssdk.services.costexplorer.CostExplorerClient;
-import software.amazon.awssdk.services.costexplorer.model.*;
+import software.amazon.awssdk.services.costexplorer.model.GetRightsizingRecommendationRequest;
+import software.amazon.awssdk.services.costexplorer.model.RecommendationTarget;
+import software.amazon.awssdk.services.costexplorer.model.RightsizingRecommendation;
+import software.amazon.awssdk.services.costexplorer.model.RightsizingRecommendationConfiguration;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.Filter;
+import software.amazon.awssdk.services.ec2.model.Instance;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -17,89 +26,86 @@ import java.util.List;
 @Component
 public class AwsRightsizingAdapter {
 
-    private final CostExplorerClient costExplorerClient;
-    private final Ec2Client ec2Client;
-    private final CloudWatchClient cloudWatchClient;
+    private final AwsClientFactory clientFactory;
 
-    public AwsRightsizingAdapter(
-            CostExplorerClient costExplorerClient,
-            Ec2Client ec2Client,
-            CloudWatchClient cloudWatchClient
-    ) {
-        this.costExplorerClient = costExplorerClient;
-        this.ec2Client = ec2Client;
-        this.cloudWatchClient = cloudWatchClient;
+    public AwsRightsizingAdapter(AwsClientFactory clientFactory) {
+        this.clientFactory = clientFactory;
     }
 
     /**
-     * Recomendaciones oficiales de AWS Cost Explorer.
+     * Recomendaciones oficiales de AWS Cost Explorer para la cuenta dada.
      * Puede devolver lista vacía si la cuenta no tiene histórico suficiente
      * o Rightsizing no está habilitado.
      */
-    public List<RightsizingRecommendation> fetchAwsRightsizingRecommendations() {
+    public List<RightsizingRecommendation> fetchAwsRightsizingRecommendations(
+            AwsAccountConfig account) {
 
-        GetRightsizingRecommendationRequest request = GetRightsizingRecommendationRequest.builder()
-                .service("AmazonEC2")
-                .configuration(RightsizingRecommendationConfiguration.builder()
-                        .recommendationTarget(RecommendationTarget.SAME_INSTANCE_FAMILY)
-                        .benefitsConsidered(false)
-                        .build())
-                .build();
+        try (CostExplorerClient client = clientFactory.costExplorerClient(account)) {
 
-        GetRightsizingRecommendationResponse response =
-                costExplorerClient.getRightsizingRecommendation(request);
+            GetRightsizingRecommendationRequest request =
+                    GetRightsizingRecommendationRequest.builder()
+                            .service("AmazonEC2")
+                            .configuration(RightsizingRecommendationConfiguration.builder()
+                                    .recommendationTarget(RecommendationTarget.SAME_INSTANCE_FAMILY)
+                                    .benefitsConsidered(false)
+                                    .build())
+                            .build();
 
-        return response.rightsizingRecommendations();
+            return client.getRightsizingRecommendation(request).rightsizingRecommendations();
+        }
     }
 
     /**
-     * Lista instancias EC2 en ejecución, con su tipo actual.
+     * Lista instancias EC2 en ejecución para la cuenta y región dadas.
      */
-    public List<Instance> fetchRunningInstances() {
+    public List<Instance> fetchRunningInstances(AwsAccountConfig account) {
 
-        DescribeInstancesRequest request = DescribeInstancesRequest.builder()
-                .filters(Filter.builder()
-                        .name("instance-state-name")
-                        .values("running")
-                        .build())
-                .build();
+        try (Ec2Client client = clientFactory.ec2Client(account)) {
 
-        List<Instance> instances = new ArrayList<>();
+            DescribeInstancesRequest request = DescribeInstancesRequest.builder()
+                    .filters(Filter.builder()
+                            .name("instance-state-name")
+                            .values("running")
+                            .build())
+                    .build();
 
-        for (Reservation reservation : ec2Client.describeInstances(request).reservations()) {
-            instances.addAll(reservation.instances());
+            List<Instance> instances = new ArrayList<>();
+            client.describeInstances(request).reservations()
+                    .forEach(r -> instances.addAll(r.instances()));
+            return instances;
         }
-
-        return instances;
     }
 
     /**
      * CPU media de una instancia en los últimos {@code days} días.
      * Devuelve -1 si no hay datos suficientes.
      */
-    public double fetchAverageCpuUtilization(String instanceId, int days) {
+    public double fetchAverageCpuUtilization(AwsAccountConfig account,
+                                             String instanceId,
+                                             int days) {
 
-        Instant end = Instant.now();
-        Instant start = end.minus(days, ChronoUnit.DAYS);
+        try (CloudWatchClient client = clientFactory.cloudWatchClient(account)) {
 
-        GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
-                .namespace("AWS/EC2")
-                .metricName("CPUUtilization")
-                .dimensions(Dimension.builder()
-                        .name("InstanceId")
-                        .value(instanceId)
-                        .build())
-                .startTime(start)
-                .endTime(end)
-                .period(86400) // 1 día
-                .statistics(Statistic.AVERAGE)
-                .build();
+            Instant end = Instant.now();
+            Instant start = end.minus(days, ChronoUnit.DAYS);
 
-        GetMetricStatisticsResponse response = cloudWatchClient.getMetricStatistics(request);
+            GetMetricStatisticsRequest request = GetMetricStatisticsRequest.builder()
+                    .namespace("AWS/EC2")
+                    .metricName("CPUUtilization")
+                    .dimensions(Dimension.builder()
+                            .name("InstanceId")
+                            .value(instanceId)
+                            .build())
+                    .startTime(start)
+                    .endTime(end)
+                    .period(86400)
+                    .statistics(Statistic.AVERAGE)
+                    .build();
 
-        return response.datapoints().stream()
-                .mapToDouble(Datapoint::average)
-                .average()
-                .orElse(-1.0);
+            return client.getMetricStatistics(request).datapoints().stream()
+                    .mapToDouble(Datapoint::average)
+                    .average()
+                    .orElse(-1.0);
+        }
     }
 }

@@ -10,6 +10,6 @@ public record RightsizingSuggestion(
         String recommendedType,
         double estimatedMonthlySavings,
         String reason,
-        String source // "AWS_RIGHTSIZING_API" o "CPU_UTILIZATION_HEURISTIC"
-) {
+        String source, // "AWS_RIGHTSIZING_API" o "CPU_UTILIZATION_HEURISTIC"
+        String accountAlias) {
 }

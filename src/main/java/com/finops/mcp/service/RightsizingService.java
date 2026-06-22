@@ -1,9 +1,11 @@
 package com.finops.mcp.service;
 
+import com.finops.mcp.account.AwsAccountProperties;
+import com.finops.mcp.account.AwsAccountProperties.AwsAccountConfig;
 import com.finops.mcp.aws.AwsRightsizingAdapter;
 import com.finops.mcp.model.RightsizingSuggestion;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.services.costexplorer.model.RightsizingRecommendation; // <- Corregido aquí
+import software.amazon.awssdk.services.costexplorer.model.RightsizingRecommendation;
 import software.amazon.awssdk.services.ec2.model.Instance;
 
 import java.util.ArrayList;
@@ -13,10 +15,10 @@ import java.util.Map;
 @Service
 public class RightsizingService {
 
-    private static final double LOW_CPU_THRESHOLD = 15.0; // %
+    private static final double LOW_CPU_THRESHOLD = 15.0;
     private static final int DEFAULT_DAYS = 14;
 
-    // El DOWNSIZE_MAP es deliberadamente simple y solo cubre familias t3/m5
+    // Mapa de downsizing dentro de la misma familia (cubre casos comunes de portfolio)
     private static final Map<String, String> DOWNSIZE_MAP = Map.of(
             "t3.2xlarge", "t3.xlarge",
             "t3.xlarge", "t3.large",
@@ -27,41 +29,46 @@ public class RightsizingService {
     );
 
     private final AwsRightsizingAdapter adapter;
+    private final AwsAccountProperties accountProperties;
 
-    public RightsizingService(AwsRightsizingAdapter adapter) {
+    public RightsizingService(AwsRightsizingAdapter adapter,
+                              AwsAccountProperties accountProperties) {
         this.adapter = adapter;
+        this.accountProperties = accountProperties;
     }
 
     public List<RightsizingSuggestion> getRecommendations() {
 
-        List<RightsizingSuggestion> awsRecommendations = fromAwsApi();
+        List<RightsizingSuggestion> result = new ArrayList<>();
 
-        if (!awsRecommendations.isEmpty()) {
-            return awsRecommendations;
+        for (AwsAccountConfig account : accountProperties.accounts()) {
+            List<RightsizingSuggestion> fromApi = fromAwsApi(account);
+            result.addAll(fromApi.isEmpty() ? fromCpuHeuristic(account) : fromApi);
         }
 
-        return fromCpuHeuristic();
+        return result;
     }
 
-    private List<RightsizingSuggestion> fromAwsApi() {
+    private List<RightsizingSuggestion> fromAwsApi(AwsAccountConfig account) {
 
         List<RightsizingSuggestion> result = new ArrayList<>();
 
-        // Corregido el tipo de objeto en el bucle for
-        for (RightsizingRecommendation entry : adapter.fetchAwsRightsizingRecommendations()) {
+        for (RightsizingRecommendation recommendation :
+                adapter.fetchAwsRightsizingRecommendations(account)) {
 
-            if (entry.modifyRecommendationDetail() == null
-                    || entry.modifyRecommendationDetail().targetInstances().isEmpty()) {
+            // Solo procesamos recomendaciones de tipo MODIFY (bajar tamaño)
+            // TERMINATE es otro tipo válido que dejamos fuera del scope actual
+            if (recommendation.modifyRecommendationDetail() == null
+                    || recommendation.modifyRecommendationDetail().targetInstances().isEmpty()) {
                 continue;
             }
 
-            var current = entry.currentInstance();
-            var target = entry.modifyRecommendationDetail().targetInstances().getFirst();
+            var current = recommendation.currentInstance();
+            var target = recommendation.modifyRecommendationDetail()
+                    .targetInstances()
+                    .getFirst();
 
-            double savings = current.monthlyCost() != null
-                    ? Double.parseDouble(current.monthlyCost())
-                      - Double.parseDouble(target.estimatedMonthlyCost())
-                    : 0.0;
+            double savings = parseSavings(current.monthlyCost(), target.estimatedMonthlyCost());
 
             result.add(new RightsizingSuggestion(
                     current.resourceId(),
@@ -69,43 +76,52 @@ public class RightsizingService {
                     target.resourceDetails().ec2ResourceDetails().instanceType(),
                     savings,
                     "AWS Cost Explorer recommendation based on usage history",
-                    "AWS_RIGHTSIZING_API"
+                    "AWS_RIGHTSIZING_API",
+                    account.alias()
             ));
         }
 
         return result;
     }
 
-    private List<RightsizingSuggestion> fromCpuHeuristic() {
+    private List<RightsizingSuggestion> fromCpuHeuristic(AwsAccountConfig account) {
 
         List<RightsizingSuggestion> result = new ArrayList<>();
 
-        for (Instance instance : adapter.fetchRunningInstances()) {
+        for (Instance instance : adapter.fetchRunningInstances(account)) {
 
             String currentType = instance.instanceTypeAsString();
             String recommendedType = DOWNSIZE_MAP.get(currentType);
 
-            if (recommendedType == null) {
-                continue; // no tenemos un downsize sugerido para este tipo
-            }
+            if (recommendedType == null) continue;
 
-            double avgCpu = adapter.fetchAverageCpuUtilization(instance.instanceId(), DEFAULT_DAYS);
+            double avgCpu = adapter.fetchAverageCpuUtilization(
+                    account, instance.instanceId(), DEFAULT_DAYS);
 
-            if (avgCpu < 0 || avgCpu >= LOW_CPU_THRESHOLD) {
-                continue; // sin datos suficientes o uso normal
-            }
+            if (avgCpu < 0 || avgCpu >= LOW_CPU_THRESHOLD) continue;
 
             result.add(new RightsizingSuggestion(
                     instance.instanceId(),
                     currentType,
                     recommendedType,
-                    0.0, // sin coste real disponible en este fallback
+                    0.0,
                     "Average CPU utilization %.1f%% over last %d days is below threshold (%.0f%%)"
                             .formatted(avgCpu, DEFAULT_DAYS, LOW_CPU_THRESHOLD),
-                    "CPU_UTILIZATION_HEURISTIC"
+                    "CPU_UTILIZATION_HEURISTIC",
+                    account.alias()
             ));
         }
 
         return result;
+    }
+
+    private double parseSavings(String currentMonthlyCost, String targetMonthlyCost) {
+        try {
+            if (currentMonthlyCost == null || targetMonthlyCost == null) return 0.0;
+            return Double.parseDouble(currentMonthlyCost)
+                    - Double.parseDouble(targetMonthlyCost);
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
     }
 }

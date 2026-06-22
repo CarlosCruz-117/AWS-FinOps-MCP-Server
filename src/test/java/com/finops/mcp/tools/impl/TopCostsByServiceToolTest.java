@@ -4,96 +4,61 @@ import com.finops.mcp.csv.CsvExporter;
 import com.finops.mcp.impl.TopCostsByServiceTool;
 import com.finops.mcp.model.CostRecord;
 import com.finops.mcp.service.CostAggregationService;
-
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class TopCostsByServiceToolTest {
 
+    private final CostAggregationService service = mock(CostAggregationService.class);
+    private final CsvExporter csvExporter = mock(CsvExporter.class);
+    private final TopCostsByServiceTool tool = new TopCostsByServiceTool(service, csvExporter);
+
     @Test
-    void shouldReturnAggregatedCostsAndCsvPath() {
-
-        // ARRANGE
-        CostAggregationService service =
-                mock(CostAggregationService.class);
-
-        CsvExporter csvExporter =
-                mock(CsvExporter.class);
+    void shouldReturnRecordsAndCsvPath() {
 
         List<CostRecord> mockRecords = List.of(
-                new CostRecord(
-                        "ec2",
-                        "t3.medium",
-                        "eu-west-1",
-                        99.0
-                )
+                new CostRecord("EC2", "SERVICE_GROUP", "GLOBAL", 99.0,
+                        LocalDate.now(), "test-account")
         );
+        when(service.getTopCosts(7, 10)).thenReturn(mockRecords);
+        when(csvExporter.export(mockRecords)).thenReturn("output/cost-report.csv");
 
-        when(service.getTopCosts(10))
-                .thenReturn(mockRecords);
+        Map<String, Object> result = (Map<String, Object>)
+                tool.execute(Map.of("limit", 10, "days", 7));
 
-        when(csvExporter.export(mockRecords))
-                .thenReturn("output/cost-report.csv");
-
-        TopCostsByServiceTool tool =
-                new TopCostsByServiceTool(service, csvExporter);
-
-        // ACT
-        Object result =
-                tool.execute(Map.of("limit", 10));
-
-        // ASSERT
-        assertThat(result)
-                .isInstanceOf(Map.class);
-
-        Map<String, Object> response = (Map<String, Object>) result;
-
-        assertThat(response).containsKey("records");
-
-        assertThat(response).containsKey("csvFile");
-
-        assertThat(response.get("csvFile"))
-                .isEqualTo("output/cost-report.csv");
-
-        verify(service)
-                .getTopCosts(10);
-
-        verify(csvExporter)
-                .export(mockRecords);
+        assertThat(result).containsKeys("records", "csvFile");
+        assertThat(result.get("csvFile")).isEqualTo("output/cost-report.csv");
+        verify(service).getTopCosts(7, 10);
     }
 
     @Test
-    void shouldUseDefaultLimit_whenLimitNotProvided() {
+    void shouldUseDefaultLimitAndDays_whenArgsEmpty() {
 
-        // ARRANGE
-        CostAggregationService service =
-                mock(CostAggregationService.class);
+        when(service.getTopCosts(anyInt(), anyInt())).thenReturn(List.of());
+        when(csvExporter.export(anyList())).thenReturn("output/cost-report.csv");
 
-        CsvExporter csvExporter =
-                mock(CsvExporter.class);
-
-        when(service.getTopCosts(10))
-                .thenReturn(List.of());
-
-        when(csvExporter.export(anyList()))
-                .thenReturn("output/cost-report.csv");
-
-        TopCostsByServiceTool tool =
-                new TopCostsByServiceTool(service, csvExporter);
-
-        // ACT
         tool.execute(Map.of());
 
-        // ASSERT
-        verify(service)
-                .getTopCosts(10);
+        verify(service).getTopCosts(7, 10);
+    }
 
-        verify(csvExporter)
-                .export(anyList());
+    @Test
+    void shouldDelegateToServiceFilter_whenServiceArgProvided() {
+
+        when(service.getTopCostsForService(eq("Amazon EC2"), anyInt(), anyInt()))
+                .thenReturn(List.of());
+        when(csvExporter.export(anyList())).thenReturn("output/cost-report.csv");
+
+        tool.execute(Map.of("service", "Amazon EC2", "days", 7, "limit", 5));
+
+        verify(service).getTopCostsForService("Amazon EC2", 7, 5);
+        verify(service, never()).getTopCosts(anyInt(), anyInt());
     }
 }
